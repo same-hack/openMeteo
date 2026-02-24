@@ -21,40 +21,32 @@
 >
   <div style="font-weight: 700; margin-bottom: 8px">中心の天気（Open-Meteo）</div>
 
-  <!-- 取得中 -->
-  <div *ngIf="centerLoading">取得中…</div>
+  @if (centerLoading) {
+    <div>取得中…</div>
+  }
 
-  <!-- エラー表示 -->
-  <div *ngIf="centerError" style="color: #b00020">
-    {{ centerError }}
-  </div>
+  @if (centerError) {
+    <div style="color: #b00020">{{ centerError }}</div>
+  }
 
-  <!-- 正常取得時 -->
-  <div *ngIf="centerWeather">
+  @if (centerWeather) {
     <div><strong>天気:</strong> {{ centerWeatherText }}</div>
-
     <div>
-      <strong>気温:</strong>
-      {{ centerWeather.current?.temperature_2m }}
+      <strong>気温:</strong> {{ centerWeather.current?.temperature_2m }}
       {{ centerWeather.current_units?.temperature_2m ?? '°C' }}
     </div>
-
     <div>
-      <strong>風速:</strong>
-      {{ centerWeather.current?.wind_speed_10m }}
+      <strong>風速:</strong> {{ centerWeather.current?.wind_speed_10m }}
       {{ centerWeather.current_units?.wind_speed_10m ?? 'km/h' }}
     </div>
 
     <div style="margin-top: 8px; font-size: 12px; color: #666">
       {{ centerWeather.current?.time }}
     </div>
-
     <div style="margin-top: 4px; font-size: 12px; color: #777">
-      center:
-      {{ centerWeather.latitude.toFixed(5) }},
-      {{ centerWeather.longitude.toFixed(5) }}
+      center: {{ centerWeather.latitude.toFixed(5) }}, {{ centerWeather.longitude.toFixed(5) }}
     </div>
 
     <div style="margin-top: 6px; font-size: 12px; color: #999">zoom: {{ currentZoom }}</div>
-  </div>
+  }
 </div>
