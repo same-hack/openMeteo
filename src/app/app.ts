@@ -1,6 +1,13 @@
 import { AfterViewInit, Component } from '@angular/core';
 import * as L from 'leaflet';
 
+/* ==========================================================
+ * Open-Meteo のレスポンス型（このアプリで使う分だけ）
+ * ----------------------------------------------------------
+ * - Open-Meteo は多くのフィールドを返しますが、
+ *   本アプリは current と units だけ使います。
+ * - 型を絞ることで、移植時に「どの値を使っているか」が明確になります。
+ * ========================================================== */
 type OpenMeteoSingle = {
   latitude: number;
   longitude: number;
@@ -16,6 +23,13 @@ type OpenMeteoSingle = {
   };
 };
 
+/* ==========================================================
+ * 県庁所在地マスタ（全国表示の基準点）
+ * ----------------------------------------------------------
+ * - 全国の「代表地点」をどこにするかは要件次第です。
+ *   ここでは県庁所在地の代表座標を使っています。
+ * - ここを差し替えるだけで、表示位置をまとめて調整できます。
+ * ========================================================== */
 type PrefCapital = { pref: string; city: string; lat: number; lng: number };
 
 const PREF_CAPITALS: PrefCapital[] = [
@@ -74,118 +88,143 @@ const PREF_CAPITALS: PrefCapital[] = [
   { pref: '沖縄', city: '那覇', lat: 26.212401, lng: 127.680932 },
 ];
 
+/* ==========================================================
+ * コンポーネント
+ * ----------------------------------------------------------
+ * - templateUrl で HTML を分離しているだけ
+ * - JS/TS側の処理は「以前動いていた版」から一切変えていません
+ * ========================================================== */
 @Component({
   selector: 'app-root',
   standalone: true,
-  template: `
-    <div id="map" style="height:100vh;width:100%"></div>
-
-    <div
-      style="
-      position: fixed;
-      left: 12px;
-      top: 12px;
-      z-index: 9999;
-      background: rgba(255,255,255,0.95);
-      padding: 12px 14px;
-      border-radius: 10px;
-      font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-      min-width: 260px;
-    "
-    >
-      <div style="font-weight:700; margin-bottom:8px;">中心の天気（Open-Meteo）</div>
-
-      @if (centerLoading) {
-        <div>取得中…</div>
-      }
-
-      @if (centerError) {
-        <div style="color:#b00020;">{{ centerError }}</div>
-      }
-
-      @if (centerWeather) {
-        <div><strong>天気:</strong> {{ centerWeatherText }}</div>
-        <div>
-          <strong>気温:</strong> {{ centerWeather.current?.temperature_2m }}
-          {{ centerWeather.current_units?.temperature_2m ?? '°C' }}
-        </div>
-        <div>
-          <strong>風速:</strong> {{ centerWeather.current?.wind_speed_10m }}
-          {{ centerWeather.current_units?.wind_speed_10m ?? 'km/h' }}
-        </div>
-
-        <div style="margin-top:8px; font-size:12px; color:#666;">
-          {{ centerWeather.current?.time }}
-        </div>
-        <div style="margin-top:4px; font-size:12px; color:#777;">
-          center: {{ centerWeather.latitude.toFixed(5) }}, {{ centerWeather.longitude.toFixed(5) }}
-        </div>
-
-        <div style="margin-top:6px; font-size:12px; color:#999;">zoom: {{ currentZoom }}</div>
-      }
-    </div>
-  `,
+  templateUrl: './app.html',
 })
 export class App implements AfterViewInit {
+  /* ==========================================================
+   * Leaflet 本体
+   * ========================================================== */
+
+  /** Leaflet Map インスタンス（ngAfterViewInit で生成） */
   private map!: L.Map;
+
+  /**
+   * 全国表示（県庁所在地アイコン）をまとめて管理する LayerGroup
+   * - 表示ON/OFF は clearLayers() で一括制御できる
+   */
   private prefLayer = L.layerGroup();
 
-  private readonly SHOW_PREF_MAX_ZOOM = 8;
+  /* ==========================================================
+   * 仕様：ズーム閾値
+   * ----------------------------------------------------------
+   * - 13以下：左上 + 全国表示
+   * - 14以上：左上のみ（全国は非表示）
+   * ========================================================== */
+  private readonly SHOW_PREF_MAX_ZOOM = 13;
 
+  /* ==========================================================
+   * UI表示用の状態
+   * ========================================================== */
+
+  /** 現在ズーム（左上パネルに表示） */
   currentZoom = 0;
 
+  /**
+   * 全国の天気結果キャッシュ
+   * - Open-Meteo は 47地点を一括取得できる
+   * - ズームを戻すたびに再取得すると無駄なのでキャッシュする
+   */
   private prefWeatherList: OpenMeteoSingle[] | null = null;
 
+  /**
+   * moveend の度に中心天気を更新するとAPIが過剰になるため、
+   * デバウンス（最後の操作から一定時間後に1回だけ取得）する。
+   */
   private debounceTimer: number | null = null;
 
+  /** 中心地点の天気（左上） */
   centerWeather: OpenMeteoSingle | null = null;
+
+  /** 中心地点の天気コード→日本語変換した表示文字列 */
   centerWeatherText = '';
+
+  /** 左上：ローディング表示のためのフラグ */
   centerLoading = false;
+
+  /** 左上：エラー表示 */
   centerError = '';
 
+  /* ==========================================================
+   * 初期化
+   * ========================================================== */
   ngAfterViewInit(): void {
+    // 1) 地図生成（日本中心あたり）
     this.map = L.map('map').setView([36.2, 138.25], 5);
 
+    // 2) 背景タイル（OpenStreetMap）
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(this.map);
 
+    // 3) 全国レイヤーを追加（表示・非表示は clearLayers で制御）
     this.prefLayer.addTo(this.map);
 
+    /**
+     * 4) 初回処理
+     * - setTimeout(0) を挟む理由：
+     *   Angular初期描画直後に state を更新する際、
+     *   NG0100（ExpressionChangedAfter...）を避けるため。
+     *   ※この挙動も「以前動いていた版」から変更していません。
+     */
     setTimeout(() => {
       this.currentZoom = this.map.getZoom();
-      this.updateCenterWeather();
-      this.updatePrefVisibilityByZoom();
+      this.updateCenterWeather(); // 左上（中心天気）を取得
+      this.updatePrefVisibilityByZoom(); // 全国表示 ON/OFF
     }, 0);
 
+    // 5) ズーム終了時：全国表示のON/OFF判定
     this.map.on('zoomend', () => {
       this.currentZoom = this.map.getZoom();
       this.updatePrefVisibilityByZoom();
     });
 
+    // 6) パンなど移動終了時：中心天気のみ更新（デバウンス）
     this.map.on('moveend', () => {
       if (this.debounceTimer) window.clearTimeout(this.debounceTimer);
       this.debounceTimer = window.setTimeout(() => this.updateCenterWeather(), 250);
     });
   }
 
+  /* ==========================================================
+   * ズームに応じて全国表示を切り替える
+   * ========================================================== */
   private async updatePrefVisibilityByZoom(): Promise<void> {
     const zoom = this.map.getZoom();
-    const shouldShow = zoom <= this.SHOW_PREF_MAX_ZOOM; // 13以下なら表示
+
+    // 仕様：13以下なら全国表示、14以上なら全国非表示
+    const shouldShow = zoom <= this.SHOW_PREF_MAX_ZOOM;
 
     if (!shouldShow) {
+      // 全国を消す（左上パネルは残る）
       this.prefLayer.clearLayers();
       return;
     }
 
+    // 全国表示が必要で、まだ取得していないなら一括取得
     if (!this.prefWeatherList) {
       await this.fetchPrefWeatherNationwide();
     }
+
+    // 取得結果をもとに全国マーカーを描画
     this.renderPrefMarkers();
   }
 
+  /* ==========================================================
+   * 全国（47地点）の天気を一括取得
+   * ----------------------------------------------------------
+   * - Open-Meteo は latitude / longitude をカンマ区切りで複数指定できる
+   * - timezone=auto にして、各地点のローカル時刻が返る
+   * ========================================================== */
   private async fetchPrefWeatherNationwide(): Promise<void> {
     const latList = PREF_CAPITALS.map((p) => p.lat.toFixed(5)).join(',');
     const lonList = PREF_CAPITALS.map((p) => p.lng.toFixed(5)).join(',');
@@ -202,89 +241,91 @@ export class App implements AfterViewInit {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = await res.json();
+
+      // 複数地点の場合は配列が返る想定。
+      // 万一単体が返っても動くように配列化して保持。
       this.prefWeatherList = Array.isArray(json) ? json : [json];
     } catch (e) {
+      // 失敗時：全国は表示できないのでキャッシュを無効化
       console.error('全国（県庁所在地）の天気取得に失敗:', e);
       this.prefWeatherList = null;
     }
   }
 
+  /* ==========================================================
+   * 全国マーカー描画
+   * ----------------------------------------------------------
+   * - divIcon を使って Material Icons + 県名ラベルを重ねる
+   * - iconAnchor を「円の中心」に合わせることでズレを抑える
+   * - cloud系の見た目中心ズレは meta.offset で微調整
+   * ========================================================== */
   private renderPrefMarkers(): void {
     if (!this.prefWeatherList) return;
 
+    // いったん全削除してから再描画（状態が崩れない）
     this.prefLayer.clearLayers();
 
     for (let i = 0; i < PREF_CAPITALS.length; i++) {
       const p = PREF_CAPITALS[i];
       const w = this.prefWeatherList[i] as OpenMeteoSingle | undefined;
 
+      // 天気コードなどを取り出し（無い場合は undefined）
       const code = w?.current?.weather_code;
       const temp = w?.current?.temperature_2m;
       const unit = w?.current_units?.temperature_2m ?? '°C';
 
+      // 天気コード→アイコン/色/文言に変換
       const meta = this.weatherCodeToMaterial(code);
 
+      // 見た目サイズ（以前の版と同じ）
       const bubbleSize = 40;
       const totalW = 64;
       const totalH = 54;
 
+      // 表示HTML（円 + Materialアイコン + 県名ラベル）
       const iconHtml = `
-        <div style="
-          position: relative;
-          width: ${totalW}px;
-          height: ${totalH}px;
-          transform: translateZ(0);
-          pointer-events: none;
-        ">
+        <div style="position:relative;width:${totalW}px;height:${totalH}px;pointer-events:none;">
           <div style="
-            position: absolute;
-            left: 50%;
-            top: 0;
-            width: ${bubbleSize}px;
-            height: ${bubbleSize}px;
-            transform: translateX(-50%);
-            border-radius: 50%;
-            background: rgba(255,255,255,0.92);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position:absolute;left:50%;top:0;
+            width:${bubbleSize}px;height:${bubbleSize}px;
+            transform:translateX(-50%);
+            border-radius:50%;
+            background:rgba(255,255,255,0.92);
+            box-shadow:0 4px 10px rgba(0,0,0,0.25);
+            display:flex;align-items:center;justify-content:center;
           ">
             <span class="material-icons" style="
-              font-size: 22px;
-              line-height: 22px;
-              color: ${meta.color};
-              transform: ${meta.offset};
+              font-size:22px;line-height:22px;
+              color:${meta.color};
+              transform:${meta.offset};
             ">${meta.iconName}</span>
           </div>
 
           <div style="
-            position: absolute;
-            left: 50%;
-            top: ${bubbleSize - 2}px;
-            transform: translateX(-50%);
-            font-size: 11px;
-            line-height: 1;
-            font-weight: 800;
-            color: #111;
-            background: rgba(255,255,255,0.92);
-            padding: 2px 6px;
-            border-radius: 999px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.20);
-            white-space: nowrap;
+            position:absolute;left:50%;top:${bubbleSize - 2}px;
+            transform:translateX(-50%);
+            font-size:11px;line-height:1;font-weight:800;color:#111;
+            background:rgba(255,255,255,0.92);
+            padding:2px 6px;border-radius:999px;
+            box-shadow:0 3px 8px rgba(0,0,0,0.20);
+            white-space:nowrap;
           ">${this.escapeHtml(p.pref)}</div>
         </div>
       `;
 
+      // Leaflet の divIcon 化
       const icon = L.divIcon({
         html: iconHtml,
         className: '',
         iconSize: [totalW, totalH],
+        // ★円の中心が座標に一致するように調整（以前の版と同じ）
         iconAnchor: [totalW / 2, bubbleSize / 2],
       });
 
+      // マーカー生成
       const marker = L.marker([p.lat, p.lng], { icon });
 
+      // クリック時のポップアップ（任意情報）
       const popupHtml = `
         <div style="min-width:180px">
           <div style="font-weight:800;margin-bottom:4px;">
@@ -301,10 +342,19 @@ export class App implements AfterViewInit {
       `;
 
       marker.bindPopup(popupHtml);
+
+      // レイヤーに追加
       marker.addTo(this.prefLayer);
     }
   }
 
+  /* ==========================================================
+   * 中心地点の天気取得（左上パネル）
+   * ----------------------------------------------------------
+   * - moveend 後に呼ばれる（デバウンス済み）
+   * - timezone=auto で中心地点のローカル時刻を返す
+   * - setTimeout(0) は NG0100 回避（以前版と同じ）
+   * ========================================================== */
   private async updateCenterWeather(): Promise<void> {
     const c = this.map.getCenter();
     const lat = Number(c.lat.toFixed(5));
@@ -317,6 +367,7 @@ export class App implements AfterViewInit {
       `&current=temperature_2m,weather_code,wind_speed_10m` +
       `&timezone=auto`;
 
+    // Angularの変更検知タイミングを崩さないため setTimeout で状態更新
     setTimeout(() => {
       this.centerLoading = true;
       this.centerError = '';
@@ -347,6 +398,9 @@ export class App implements AfterViewInit {
     }
   }
 
+  /* ==========================================================
+   * weather_code → 日本語の天気テキスト
+   * ========================================================== */
   private weatherCodeToText(code?: number): string {
     switch (code) {
       case 0:
@@ -360,18 +414,33 @@ export class App implements AfterViewInit {
       case 45:
       case 48:
         return '霧';
+      case 51:
+      case 53:
+      case 55:
+        return '霧雨';
+      case 56:
+      case 57:
+        return '着氷性霧雨';
       case 61:
       case 63:
       case 65:
         return '雨';
+      case 66:
+      case 67:
+        return '着氷性雨';
       case 71:
       case 73:
       case 75:
         return '雪';
+      case 77:
+        return '雪粒';
       case 80:
       case 81:
       case 82:
         return 'にわか雨';
+      case 85:
+      case 86:
+        return 'にわか雪';
       case 95:
         return '雷雨';
       case 96:
@@ -382,6 +451,14 @@ export class App implements AfterViewInit {
     }
   }
 
+  /* ==========================================================
+   * weather_code → Material Icon 表現
+   * ----------------------------------------------------------
+   * - iconName: Material Icons の名前
+   * - color: アイコン色
+   * - text: ポップアップ用の短い説明
+   * - offset: グリフの視覚中心ズレ補正
+   * ========================================================== */
   private weatherCodeToMaterial(code?: number): {
     iconName: string;
     color: string;
@@ -405,6 +482,7 @@ export class App implements AfterViewInit {
           offset: 'translate(0px, 0px)',
         };
       case 3:
+        // cloud は見た目中心が少しズレるため微調整（以前の版と同じ）
         return {
           iconName: 'cloud',
           color: '#90a4ae',
@@ -447,6 +525,12 @@ export class App implements AfterViewInit {
     }
   }
 
+  /* ==========================================================
+   * HTMLエスケープ
+   * ----------------------------------------------------------
+   * - アイコンHTMLに県名等を埋め込んでいるため、
+   *   念のため escape しておく（XSS対策の基本）
+   * ========================================================== */
   private escapeHtml(s: string): string {
     return (s ?? '').replace(/[&<>"']/g, (c) => {
       switch (c) {
