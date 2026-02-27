@@ -282,37 +282,38 @@ export class App implements AfterViewInit {
       const totalW = 64;
       const totalH = 54;
 
-      // 表示HTML（円 + Materialアイコン + 県名ラベル）
+      // 表示HTML（四角カード内にアイコン + 地名を上下配置）
       const iconHtml = `
-        <div style="position:relative;width:${totalW}px;height:${totalH}px;pointer-events:none;">
-          <div style="
-            position:absolute;left:50%;top:0;
-            width:${bubbleSize}px;height:${bubbleSize}px;
-            transform:translateX(-50%);
-            border-radius:50%;
-            background:rgba(255,255,255,0.92);
-            box-shadow:0 4px 10px rgba(0,0,0,0.25);
-            display:flex;align-items:center;justify-content:center;
-          ">
-            <span class="material-icons" style="
-              font-size:22px;line-height:22px;
-              color:${meta.color};
-              transform:${meta.offset};
-            ">${meta.iconName}</span>
-          </div>
+  <div style="
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:8px 10px;
+    background:rgba(255,255,255,0.95);
+    border-radius:10px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.25);
+    white-space:nowrap;
+    pointer-events:none;
+  ">
+    <span class="material-icons" style="
+      font-size:22px;
+      line-height:22px;
+      color:${meta.color};
+      transform:${meta.offset};
+      margin-bottom:4px;
+    ">${meta.iconName}</span>
 
-          <div style="
-            position:absolute;left:50%;top:${bubbleSize - 2}px;
-            transform:translateX(-50%);
-            font-size:11px;line-height:1;font-weight:800;color:#111;
-            background:rgba(255,255,255,0.92);
-            padding:2px 6px;border-radius:999px;
-            box-shadow:0 3px 8px rgba(0,0,0,0.20);
-            white-space:nowrap;
-          ">${this.escapeHtml(p.pref)}</div>
-        </div>
-      `;
-
+    <span style="
+      font-size:12px;
+      font-weight:800;
+      color:#111;
+      line-height:1;
+    ">
+      ${this.escapeHtml(p.pref)}
+    </span>
+  </div>
+`;
       // Leaflet の divIcon 化
       const icon = L.divIcon({
         html: iconHtml,
