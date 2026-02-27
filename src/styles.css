@@ -1,1 +1,27 @@
-/* You can add global styles to this file, and also import other style files */
+/* これが「白に戻る」原因の本体。ここを強制上書き */
+.leaflet-popup-content-wrapper {
+  background: rgb(34, 34, 34) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 中の余白や文字色 */
+.leaflet-popup-content {
+  margin: 12px 14px !important;
+  color: #fff !important;
+}
+
+/* 下の三角（tip）も同じ色に */
+.leaflet-popup-tip {
+  background: rgba(34, 34, 34, 0.92) !important;
+}
+
+/* ×ボタン */
+.leaflet-container a.leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: #fff !important;
+}
