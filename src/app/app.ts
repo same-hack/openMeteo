@@ -2,6 +2,7 @@
 import { AfterViewInit, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
+type RegionPoint = { region: string; lat: number; lng: number };
 
 /* ==========================================================
  * Open-Meteo のレスポンス型（このアプリで使う分だけ）
@@ -139,6 +140,11 @@ export class App implements AfterViewInit {
     this.map.on('moveend', () => {
       if (this.debounceTimer) window.clearTimeout(this.debounceTimer);
       this.debounceTimer = window.setTimeout(() => this.updateCenterWeather(), 250);
+    });
+
+    this.map.on('zoomend', () => {
+      this.currentZoom = this.map.getZoom();
+      this.updateOverlayByZoom(); // ★追加
     });
   }
 
@@ -440,6 +446,125 @@ export class App implements AfterViewInit {
         default:
           return c;
       }
+    });
+  }
+
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  private readonly REGION_MODE_MAX_ZOOM = 5; // 例：5以下なら地方表示
+  private currentOverlayMode: 'region' | 'pref' = 'pref';
+
+  // 代表点はとりあえず「地方の中心っぽい座標」。
+  // ここは好みで調整してください（県庁所在地のどれかに寄せてもOK）
+  REGION_POINTS: RegionPoint[] = [
+    { region: '北海道', lat: 43.064, lng: 141.347 },
+    { region: '東北', lat: 39.703, lng: 141.153 },
+    { region: '関東', lat: 35.689, lng: 139.692 },
+    { region: '中部', lat: 36.651, lng: 138.181 },
+    { region: '近畿', lat: 34.686, lng: 135.52 },
+    { region: '中国', lat: 34.397, lng: 132.46 },
+    { region: '四国', lat: 33.842, lng: 132.765 },
+    { region: '九州', lat: 33.59, lng: 130.402 },
+    { region: '沖縄', lat: 26.212, lng: 127.681 },
+  ];
+
+  private updateOverlayByZoom(): void {
+    const zoom = this.map.getZoom();
+    const next: 'region' | 'pref' = zoom <= this.REGION_MODE_MAX_ZOOM ? 'region' : 'pref';
+
+    if (!this.showNationwide) {
+      this.prefLayer.clearLayers();
+      this.currentOverlayMode = next;
+      return;
+    }
+
+    if (this.currentOverlayMode === next) return; // 同じなら何もしない
+    this.currentOverlayMode = next;
+
+    // モードに応じて描画し直す（同じ layer を使い回す）
+    if (next === 'region') {
+      this.renderRegionMarkers();
+    } else {
+      this.ensureNationwideRendered(); // 既存（県庁所在地の全国表示）
+    }
+  }
+
+  private renderRegionMarkers(): void {
+    // いったんクリア
+    this.prefLayer.clearLayers();
+
+    const latList = this.REGION_POINTS.map((p) => p.lat.toFixed(5)).join(',');
+    const lonList = this.REGION_POINTS.map((p) => p.lng.toFixed(5)).join(',');
+
+    this.weatherService.getNationwideWeather(latList, lonList).subscribe({
+      next: (list) => {
+        // list[i] が this.REGION_POINTS[i] に対応
+        for (let i = 0; i < this.REGION_POINTS.length; i++) {
+          const r = this.REGION_POINTS[i];
+          const w = list[i];
+
+          const code = w?.current?.weather_code;
+          const temp = w?.current?.temperature_2m;
+          const tempUnit = w?.current_units?.temperature_2m ?? '°C';
+          const wind = w?.current?.wind_speed_10m;
+          const windUnit = w?.current_units?.wind_speed_10m ?? 'km/h';
+
+          const meta = this.weatherCodeToMaterial(code); // 既存を流用
+
+          // 地方カード（県と同じ見た目でOK）
+          const iconHtml = `
+          <div style="
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            padding:8px 10px;background:rgba(34,34,34,0.92);border-radius:10px;
+            box-shadow:0 4px 10px rgba(0,0,0,0.35);white-space:nowrap;pointer-events:none;
+          ">
+            <span class="material-icons" style="
+              font-size:22px;line-height:22px;color:${meta.color};transform:${meta.offset};
+              margin-bottom:4px;
+            ">${meta.iconName}</span>
+            <span style="font-size:12px;font-weight:800;color:${meta.color};line-height:1;">
+              ${this.escapeHtml(r.region)}
+            </span>
+          </div>
+        `;
+
+          const icon = L.divIcon({
+            html: iconHtml,
+            className: '',
+            iconSize: [76, 58],
+            iconAnchor: [38, 29],
+          });
+
+          const marker = L.marker([r.lat, r.lng], { icon });
+
+          // ポップアップ（既存と同じ “中身だけ” 形式）
+          const popupHtml = `
+          <div style="min-width:220px;">
+            <div style="font-weight:700;margin-bottom:8px;">
+              ${this.escapeHtml(r.region)}
+            </div>
+            <div><strong>天気:</strong> ${this.escapeHtml(meta.text)}</div>
+            <div><strong>気温:</strong> ${temp ?? '-'} ${this.escapeHtml(tempUnit)}</div>
+            <div><strong>風速:</strong> ${wind ?? '-'} ${this.escapeHtml(windUnit)}</div>
+          </div>
+        `;
+          marker.bindPopup(popupHtml, { className: 'dark-popup', closeButton: true });
+
+          marker.addTo(this.prefLayer);
+        }
+      },
+      error: (err) => {
+        console.error('地方表示の取得失敗', err);
+        this.prefLayer.clearLayers();
+      },
     });
   }
 }
