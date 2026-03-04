@@ -1,12 +1,9 @@
-// app.ts
 import { AfterViewInit, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as L from 'leaflet';
+
 type RegionPoint = { region: string; lat: number; lng: number };
 
-/* ==========================================================
- * Open-Meteo のレスポンス型（このアプリで使う分だけ）
- * ========================================================== */
 type OpenMeteoSingle = {
   latitude: number;
   longitude: number;
@@ -22,66 +19,7 @@ type OpenMeteoSingle = {
   };
 };
 
-/* ==========================================================
- * 県庁所在地マスタ（全国表示の基準点）
- * ========================================================== */
 type PrefCapital = { pref: string; city: string; lat: number; lng: number };
-
-const PREF_CAPITALS: PrefCapital[] = [
-  { pref: '北海道', city: '札幌', lat: 43.063968, lng: 141.347899 },
-  { pref: '青森', city: '青森', lat: 40.824623, lng: 140.740593 },
-  { pref: '岩手', city: '盛岡', lat: 39.703531, lng: 141.152667 },
-  { pref: '宮城', city: '仙台', lat: 38.268839, lng: 140.872103 },
-  { pref: '秋田', city: '秋田', lat: 39.7186, lng: 140.102334 },
-  { pref: '山形', city: '山形', lat: 38.240437, lng: 140.363634 },
-  { pref: '福島', city: '福島', lat: 37.750299, lng: 140.467521 },
-
-  { pref: '茨城', city: '水戸', lat: 36.341813, lng: 140.446793 },
-  { pref: '栃木', city: '宇都宮', lat: 36.565725, lng: 139.883565 },
-  { pref: '群馬', city: '前橋', lat: 36.391208, lng: 139.060156 },
-  { pref: '埼玉', city: 'さいたま', lat: 35.857428, lng: 139.648933 },
-  { pref: '千葉', city: '千葉', lat: 35.605058, lng: 140.123308 },
-  { pref: '東京', city: '東京', lat: 35.689521, lng: 139.691704 },
-  { pref: '神奈川', city: '横浜', lat: 35.447753, lng: 139.642514 },
-
-  { pref: '新潟', city: '新潟', lat: 37.902418, lng: 139.023221 },
-  { pref: '富山', city: '富山', lat: 36.69529, lng: 137.211338 },
-  { pref: '石川', city: '金沢', lat: 36.594682, lng: 136.625573 },
-  { pref: '福井', city: '福井', lat: 36.065219, lng: 136.221642 },
-  { pref: '山梨', city: '甲府', lat: 35.664158, lng: 138.568449 },
-  { pref: '長野', city: '長野', lat: 36.651289, lng: 138.181224 },
-  { pref: '岐阜', city: '岐阜', lat: 35.391227, lng: 136.722291 },
-  { pref: '静岡', city: '静岡', lat: 34.975562, lng: 138.38276 },
-  { pref: '愛知', city: '名古屋', lat: 35.180188, lng: 136.906565 },
-  { pref: '三重', city: '津', lat: 34.730283, lng: 136.508591 },
-
-  { pref: '滋賀', city: '大津', lat: 35.004531, lng: 135.86859 },
-  { pref: '京都', city: '京都', lat: 35.021004, lng: 135.755607 },
-  { pref: '大阪', city: '大阪', lat: 34.686316, lng: 135.519711 },
-  { pref: '兵庫', city: '神戸', lat: 34.691279, lng: 135.183025 },
-  { pref: '奈良', city: '奈良', lat: 34.685333, lng: 135.832744 },
-  { pref: '和歌山', city: '和歌山', lat: 34.226034, lng: 135.167506 },
-
-  { pref: '鳥取', city: '鳥取', lat: 35.503869, lng: 134.237672 },
-  { pref: '島根', city: '松江', lat: 35.472324, lng: 133.05052 },
-  { pref: '岡山', city: '岡山', lat: 34.661772, lng: 133.934675 },
-  { pref: '広島', city: '広島', lat: 34.39656, lng: 132.459622 },
-  { pref: '山口', city: '山口', lat: 34.185956, lng: 131.471374 },
-
-  { pref: '徳島', city: '徳島', lat: 34.07027, lng: 134.554844 },
-  { pref: '香川', city: '高松', lat: 34.340149, lng: 134.043444 },
-  { pref: '愛媛', city: '松山', lat: 33.84166, lng: 132.765362 },
-  { pref: '高知', city: '高知', lat: 33.559706, lng: 133.53108 },
-
-  { pref: '福岡', city: '福岡', lat: 33.590355, lng: 130.401716 },
-  { pref: '佐賀', city: '佐賀', lat: 33.249367, lng: 130.298822 },
-  { pref: '長崎', city: '長崎', lat: 32.744839, lng: 129.873756 },
-  { pref: '熊本', city: '熊本', lat: 32.7898, lng: 130.741667 },
-  { pref: '大分', city: '大分', lat: 33.238194, lng: 131.612591 },
-  { pref: '宮崎', city: '宮崎', lat: 31.91109, lng: 131.423855 },
-  { pref: '鹿児島', city: '鹿児島', lat: 31.560178, lng: 130.558146 },
-  { pref: '沖縄', city: '那覇', lat: 26.212401, lng: 127.680932 },
-];
 
 @Component({
   selector: 'app-root',
@@ -91,29 +29,45 @@ const PREF_CAPITALS: PrefCapital[] = [
 })
 export class App implements AfterViewInit {
   private map!: L.Map;
-
-  /** 全国表示（県カード）をまとめて管理 */
   private prefLayer = L.layerGroup();
 
   currentZoom = 0;
 
-  /** 左上カード：開閉 */
   panelClosed = false;
-
-  /** 全国表示：トグルで切替 */
   showNationwide = true;
 
-  /** 全国天気キャッシュ */
-  private prefWeatherList: OpenMeteoSingle[] | null = null;
-
-  /** 中心天気のデバウンス */
   private debounceTimer: number | null = null;
 
-  /** 中心地点の天気（左上） */
+  /** ===== 天気キャッシュ ===== */
+
+  private prefWeatherList: OpenMeteoSingle[] | null = null;
+  private regionWeatherList: OpenMeteoSingle[] | null = null;
+
+  /** ===== 中心天気 ===== */
+
   centerWeather: OpenMeteoSingle | null = null;
   centerWeatherText = '';
   centerLoading = false;
   centerError = '';
+
+  /** ===== ズームモード ===== */
+
+  private readonly REGION_MODE_MAX_ZOOM = 5;
+  private currentOverlayMode: 'region' | 'pref' = 'pref';
+
+  /** ===== 地方代表座標 ===== */
+
+  REGION_POINTS: RegionPoint[] = [
+    { region: '北海道', lat: 43.064, lng: 141.347 },
+    { region: '東北', lat: 39.703, lng: 141.153 },
+    { region: '関東', lat: 35.689, lng: 139.692 },
+    { region: '中部', lat: 36.651, lng: 138.181 },
+    { region: '近畿', lat: 34.686, lng: 135.52 },
+    { region: '中国', lat: 34.397, lng: 132.46 },
+    { region: '四国', lat: 33.842, lng: 132.765 },
+    { region: '九州', lat: 33.59, lng: 130.402 },
+    { region: '沖縄', lat: 26.212, lng: 127.681 },
+  ];
 
   ngAfterViewInit(): void {
     this.map = L.map('map').setView([36.2, 138.25], 5);
@@ -128,25 +82,23 @@ export class App implements AfterViewInit {
     setTimeout(() => {
       this.currentZoom = this.map.getZoom();
       this.updateCenterWeather();
-
-      if (this.showNationwide) this.ensureNationwideRendered();
-      else this.prefLayer.clearLayers();
+      this.updateOverlayByZoom();
     }, 0);
 
     this.map.on('zoomend', () => {
       this.currentZoom = this.map.getZoom();
+      this.updateOverlayByZoom();
     });
 
     this.map.on('moveend', () => {
       if (this.debounceTimer) window.clearTimeout(this.debounceTimer);
       this.debounceTimer = window.setTimeout(() => this.updateCenterWeather(), 250);
     });
-
-    this.map.on('zoomend', () => {
-      this.currentZoom = this.map.getZoom();
-      this.updateOverlayByZoom(); // ★追加
-    });
   }
+
+  /** =================================
+   * 全国表示トグル
+   * ================================= */
 
   toggleNationwide(): void {
     this.showNationwide = !this.showNationwide;
@@ -155,19 +107,45 @@ export class App implements AfterViewInit {
       this.prefLayer.clearLayers();
       return;
     }
-    this.ensureNationwideRendered();
+
+    this.updateOverlayByZoom();
   }
 
-  private async ensureNationwideRendered(): Promise<void> {
-    if (!this.showNationwide) return;
+  /** =================================
+   * ズームによる表示切替
+   * ================================= */
 
-    if (!this.prefWeatherList) {
-      await this.fetchPrefWeatherNationwide();
+  private updateOverlayByZoom(): void {
+    if (!this.showNationwide) {
+      this.prefLayer.clearLayers();
+      return;
     }
-    this.renderPrefMarkers();
+
+    const zoom = this.map.getZoom();
+
+    const next: 'region' | 'pref' = zoom <= this.REGION_MODE_MAX_ZOOM ? 'region' : 'pref';
+
+    if (this.currentOverlayMode === next) return;
+
+    this.currentOverlayMode = next;
+
+    if (next === 'region') {
+      this.ensureRegionRendered();
+    } else {
+      this.ensurePrefRendered();
+    }
   }
 
-  private async fetchPrefWeatherNationwide(): Promise<void> {
+  /** =================================
+   * Pref 表示
+   * ================================= */
+
+  private ensurePrefRendered(): void {
+    if (this.prefWeatherList) {
+      this.renderMarkers('pref');
+      return;
+    }
+
     const latList = PREF_CAPITALS.map((p) => p.lat.toFixed(5)).join(',');
     const lonList = PREF_CAPITALS.map((p) => p.lng.toFixed(5)).join(',');
 
@@ -178,395 +156,47 @@ export class App implements AfterViewInit {
       `&current=temperature_2m,weather_code,wind_speed_10m` +
       `&timezone=auto`;
 
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const json = await res.json();
-      this.prefWeatherList = Array.isArray(json) ? json : [json];
-    } catch (e) {
-      console.error('全国（県庁所在地）の天気取得に失敗:', e);
-      this.prefWeatherList = null;
-    }
+    fetch(url)
+      .then((r) => r.json())
+      .then((json) => {
+        this.prefWeatherList = Array.isArray(json) ? json : [json];
+        this.renderMarkers('pref');
+      })
+      .catch((e) => console.error('pref取得失敗', e));
   }
 
-  private renderPrefMarkers(): void {
-    if (!this.prefWeatherList) return;
-    if (!this.showNationwide) return;
+  /** =================================
+   * Region 表示
+   * ================================= */
 
-    this.prefLayer.clearLayers();
-
-    for (let i = 0; i < PREF_CAPITALS.length; i++) {
-      const p = PREF_CAPITALS[i];
-      const w = this.prefWeatherList[i] as OpenMeteoSingle | undefined;
-
-      const code = w?.current?.weather_code;
-      const temp = w?.current?.temperature_2m;
-      const tempUnit = w?.current_units?.temperature_2m ?? '°C';
-
-      const wind = w?.current?.wind_speed_10m;
-      const windUnit = w?.current_units?.wind_speed_10m ?? 'km/h';
-
-      const meta = this.weatherCodeToMaterial(code);
-
-      // ===== 県カード（地図上）=====
-      const totalW = 72;
-      const totalH = 58;
-
-      const iconHtml = `
-        <div style="
-          display:flex;
-          flex-direction:column;
-          align-items:center;
-          justify-content:center;
-          padding:8px 10px;
-          background:rgba(34,34,34,0.92);
-          border-radius:10px;
-          box-shadow:0 4px 10px rgba(0,0,0,0.35);
-          white-space:nowrap;
-          pointer-events:none;
-        ">
-          <span class="material-icons" style="
-            font-size:22px;
-            line-height:22px;
-            color:${meta.color};
-            transform:${meta.offset};
-            margin-bottom:4px;
-          ">${meta.iconName}</span>
-
-          <span style="
-            font-size:12px;
-            font-weight:800;
-            color:${meta.color};
-            line-height:1;
-          ">${this.escapeHtml(p.pref)}</span>
-        </div>
-      `;
-
-      const icon = L.divIcon({
-        html: iconHtml,
-        className: '',
-        iconSize: [totalW, totalH],
-        iconAnchor: [totalW / 2, totalH / 2],
-      });
-
-      const marker = L.marker([p.lat, p.lng], { icon });
-
-      // ===== ポップアップ（外枠はCSSで作る / ここは中身だけ）=====
-      const popupHtml = `
-        <div style="min-width:220px;">
-          <div style="font-weight:700;margin-bottom:8px;">
-            ${this.escapeHtml(this.formatPrefCity(p.pref, p.city))}
-          </div>
-          <div><strong>天気:</strong> ${this.escapeHtml(meta.text)}</div>
-          <div><strong>気温:</strong> ${temp ?? '-'} ${this.escapeHtml(tempUnit)}</div>
-          <div><strong>風速:</strong> ${wind ?? '-'} ${this.escapeHtml(windUnit)}</div>
-        </div>
-      `;
-
-      // className を付けて、見た目はCSSで統一（＝二重化しない）
-      marker.bindPopup(popupHtml, { className: 'dark-popup', closeButton: true });
-
-      marker.addTo(this.prefLayer);
-    }
-  }
-
-  private async updateCenterWeather(): Promise<void> {
-    const c = this.map.getCenter();
-    const lat = Number(c.lat.toFixed(5));
-    const lon = Number(c.lng.toFixed(5));
-
-    const url =
-      `https://api.open-meteo.com/v1/forecast` +
-      `?latitude=${lat}` +
-      `&longitude=${lon}` +
-      `&current=temperature_2m,weather_code,wind_speed_10m` +
-      `&timezone=auto`;
-
-    setTimeout(() => {
-      this.centerLoading = true;
-      this.centerError = '';
-    }, 0);
-
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = (await res.json()) as OpenMeteoSingle;
-      const text = this.weatherCodeToText(data.current?.weather_code);
-
-      setTimeout(() => {
-        this.centerWeather = data;
-        this.centerWeatherText = text;
-      }, 0);
-    } catch (e) {
-      const msg = `取得失敗: ${(e as Error).message}`;
-      setTimeout(() => {
-        this.centerError = msg;
-        this.centerWeather = null;
-        this.centerWeatherText = '';
-      }, 0);
-    } finally {
-      setTimeout(() => {
-        this.centerLoading = false;
-      }, 0);
-    }
-  }
-
-  private weatherCodeToText(code?: number): string {
-    switch (code) {
-      case 0:
-        return '快晴';
-      case 1:
-        return 'ほぼ晴れ';
-      case 2:
-        return '一部曇り';
-      case 3:
-        return '曇り';
-      case 45:
-      case 48:
-        return '霧';
-      case 61:
-      case 63:
-      case 65:
-      case 80:
-      case 81:
-      case 82:
-        return '雨';
-      case 71:
-      case 73:
-      case 75:
-        return '雪';
-      case 95:
-        return '雷雨';
-      default:
-        return `不明（code=${code ?? 'null'}）`;
-    }
-  }
-
-  private weatherCodeToMaterial(code?: number): {
-    iconName: string;
-    color: string;
-    text: string;
-    offset: string;
-  } {
-    switch (code) {
-      case 0:
-        return {
-          iconName: 'wb_sunny',
-          color: '#fbc02d',
-          text: '快晴',
-          offset: 'translate(0px, 0px)',
-        };
-      case 1:
-      case 2:
-        return {
-          iconName: 'partly_cloudy_day',
-          color: '#ffca28',
-          text: '晴れ時々曇り',
-          offset: 'translate(0px, 0px)',
-        };
-      case 3:
-        return {
-          iconName: 'cloud',
-          color: '#90a4ae',
-          text: '曇り',
-          offset: 'translate(-1px, 0px)',
-        };
-      case 45:
-      case 48:
-        return { iconName: 'foggy', color: '#9e9e9e', text: '霧', offset: 'translate(0px, 0px)' };
-      case 61:
-      case 63:
-      case 65:
-      case 80:
-      case 81:
-      case 82:
-        return {
-          iconName: 'umbrella',
-          color: '#1976d2',
-          text: '雨',
-          offset: 'translate(0px, 0px)',
-        };
-      case 71:
-      case 73:
-      case 75:
-        return { iconName: 'ac_unit', color: '#64b5f6', text: '雪', offset: 'translate(0px, 0px)' };
-      case 95:
-        return {
-          iconName: 'thunderstorm',
-          color: '#d32f2f',
-          text: '雷雨',
-          offset: 'translate(0px, 0px)',
-        };
-      default:
-        return {
-          iconName: 'help_outline',
-          color: '#757575',
-          text: '不明',
-          offset: 'translate(0px, 0px)',
-        };
-    }
-  }
-
-  private formatPrefCity(pref: string, city: string): string {
-    const p = (pref ?? '').trim();
-    const c = (city ?? '').trim();
-
-    const pref2 = /[都道府県]$/.test(p)
-      ? p
-      : p === '東京'
-        ? '東京都'
-        : p === '大阪'
-          ? '大阪府'
-          : p === '京都'
-            ? '京都府'
-            : p === '北海道'
-              ? '北海道'
-              : `${p}県`;
-
-    const city2 = /[市区町村]$/.test(c) ? c : `${c}市`;
-
-    return `${pref2}${city2}`;
-  }
-
-  private escapeHtml(s: string): string {
-    return (s ?? '').replace(/[&<>"']/g, (c) => {
-      switch (c) {
-        case '&':
-          return '&amp;';
-        case '<':
-          return '&lt;';
-        case '>':
-          return '&gt;';
-        case '"':
-          return '&quot;';
-        case "'":
-          return '&#39;';
-        default:
-          return c;
-      }
-    });
-  }
-
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  private readonly REGION_MODE_MAX_ZOOM = 5; // 例：5以下なら地方表示
-  private currentOverlayMode: 'region' | 'pref' = 'pref';
-
-  // 代表点はとりあえず「地方の中心っぽい座標」。
-  // ここは好みで調整してください（県庁所在地のどれかに寄せてもOK）
-  REGION_POINTS: RegionPoint[] = [
-    { region: '北海道', lat: 43.064, lng: 141.347 },
-    { region: '東北', lat: 39.703, lng: 141.153 },
-    { region: '関東', lat: 35.689, lng: 139.692 },
-    { region: '中部', lat: 36.651, lng: 138.181 },
-    { region: '近畿', lat: 34.686, lng: 135.52 },
-    { region: '中国', lat: 34.397, lng: 132.46 },
-    { region: '四国', lat: 33.842, lng: 132.765 },
-    { region: '九州', lat: 33.59, lng: 130.402 },
-    { region: '沖縄', lat: 26.212, lng: 127.681 },
-  ];
-
-  private updateOverlayByZoom(): void {
-    const zoom = this.map.getZoom();
-    const next: 'region' | 'pref' = zoom <= this.REGION_MODE_MAX_ZOOM ? 'region' : 'pref';
-
-    if (!this.showNationwide) {
-      this.prefLayer.clearLayers();
-      this.currentOverlayMode = next;
+  private ensureRegionRendered(): void {
+    if (this.regionWeatherList) {
+      this.renderMarkers('region');
       return;
     }
-
-    if (this.currentOverlayMode === next) return; // 同じなら何もしない
-    this.currentOverlayMode = next;
-
-    // モードに応じて描画し直す（同じ layer を使い回す）
-    if (next === 'region') {
-      this.renderRegionMarkers();
-    } else {
-      this.ensureNationwideRendered(); // 既存（県庁所在地の全国表示）
-    }
-  }
-
-  private renderRegionMarkers(): void {
-    // いったんクリア
-    this.prefLayer.clearLayers();
 
     const latList = this.REGION_POINTS.map((p) => p.lat.toFixed(5)).join(',');
     const lonList = this.REGION_POINTS.map((p) => p.lng.toFixed(5)).join(',');
 
-    this.weatherService.getNationwideWeather(latList, lonList).subscribe({
-      next: (list) => {
-        // list[i] が this.REGION_POINTS[i] に対応
-        for (let i = 0; i < this.REGION_POINTS.length; i++) {
-          const r = this.REGION_POINTS[i];
-          const w = list[i];
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${latList}` +
+      `&longitude=${lonList}` +
+      `&current=temperature_2m,weather_code,wind_speed_10m` +
+      `&timezone=auto`;
 
-          const code = w?.current?.weather_code;
-          const temp = w?.current?.temperature_2m;
-          const tempUnit = w?.current_units?.temperature_2m ?? '°C';
-          const wind = w?.current?.wind_speed_10m;
-          const windUnit = w?.current_units?.wind_speed_10m ?? 'km/h';
-
-          const meta = this.weatherCodeToMaterial(code); // 既存を流用
-
-          // 地方カード（県と同じ見た目でOK）
-          const iconHtml = `
-          <div style="
-            display:flex;flex-direction:column;align-items:center;justify-content:center;
-            padding:8px 10px;background:rgba(34,34,34,0.92);border-radius:10px;
-            box-shadow:0 4px 10px rgba(0,0,0,0.35);white-space:nowrap;pointer-events:none;
-          ">
-            <span class="material-icons" style="
-              font-size:22px;line-height:22px;color:${meta.color};transform:${meta.offset};
-              margin-bottom:4px;
-            ">${meta.iconName}</span>
-            <span style="font-size:12px;font-weight:800;color:${meta.color};line-height:1;">
-              ${this.escapeHtml(r.region)}
-            </span>
-          </div>
-        `;
-
-          const icon = L.divIcon({
-            html: iconHtml,
-            className: '',
-            iconSize: [76, 58],
-            iconAnchor: [38, 29],
-          });
-
-          const marker = L.marker([r.lat, r.lng], { icon });
-
-          // ポップアップ（既存と同じ “中身だけ” 形式）
-          const popupHtml = `
-          <div style="min-width:220px;">
-            <div style="font-weight:700;margin-bottom:8px;">
-              ${this.escapeHtml(r.region)}
-            </div>
-            <div><strong>天気:</strong> ${this.escapeHtml(meta.text)}</div>
-            <div><strong>気温:</strong> ${temp ?? '-'} ${this.escapeHtml(tempUnit)}</div>
-            <div><strong>風速:</strong> ${wind ?? '-'} ${this.escapeHtml(windUnit)}</div>
-          </div>
-        `;
-          marker.bindPopup(popupHtml, { className: 'dark-popup', closeButton: true });
-
-          marker.addTo(this.prefLayer);
-        }
-      },
-      error: (err) => {
-        console.error('地方表示の取得失敗', err);
-        this.prefLayer.clearLayers();
-      },
-    });
+    fetch(url)
+      .then((r) => r.json())
+      .then((json) => {
+        this.regionWeatherList = Array.isArray(json) ? json : [json];
+        this.renderMarkers('region');
+      })
+      .catch((e) => console.error('region取得失敗', e));
   }
+
+  /** =================================
+   * 共通描画
+   * ================================= */
 
   private renderMarkers(mode: 'pref' | 'region'): void {
     this.prefLayer.clearLayers();
@@ -594,44 +224,34 @@ export class App implements AfterViewInit {
       const p = points[i];
       const w = weatherList[i];
 
-      const code = w?.current?.weather_code;
-      const temp = w?.current?.temperature_2m;
-      const tempUnit = w?.current_units?.temperature_2m ?? '°C';
-
-      const wind = w?.current?.wind_speed_10m;
-      const windUnit = w?.current_units?.wind_speed_10m ?? 'km/h';
-
-      const meta = this.weatherCodeToMaterial(code);
+      const meta = this.weatherCodeToMaterial(w?.current?.weather_code);
 
       const iconHtml = `
-      <div style="
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        padding:8px 10px;
-        background:rgba(34,34,34,0.92);
-        border-radius:10px;
-        box-shadow:0 4px 10px rgba(0,0,0,0.35);
-        white-space:nowrap;
-        pointer-events:none;
-      ">
-        <span class="material-icons" style="
-          font-size:22px;
-          line-height:22px;
-          color:${meta.color};
-          transform:${meta.offset};
-          margin-bottom:4px;
-        ">${meta.iconName}</span>
+        <div style="
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          padding:8px 10px;
+          background:rgba(34,34,34,0.92);
+          border-radius:10px;
+          box-shadow:0 4px 10px rgba(0,0,0,0.35);
+          white-space:nowrap;
+          pointer-events:none;
+        ">
+          <span class="material-icons" style="
+            font-size:22px;
+            color:${meta.color};
+            margin-bottom:4px;
+          ">${meta.iconName}</span>
 
-        <span style="
-          font-size:12px;
-          font-weight:800;
-          color:${meta.color};
-          line-height:1;
-        ">${this.escapeHtml(p.label)}</span>
-      </div>
-    `;
+          <span style="
+            font-size:12px;
+            font-weight:800;
+            color:${meta.color};
+          ">${this.escapeHtml(p.label)}</span>
+        </div>
+      `;
 
       const icon = L.divIcon({
         html: iconHtml,
@@ -643,24 +263,125 @@ export class App implements AfterViewInit {
       const marker = L.marker([p.lat, p.lng], { icon });
 
       const popupHtml = `
-      <div style="min-width:220px;">
-        <div style="font-weight:700;margin-bottom:8px;">
-          ${this.escapeHtml(p.title)}
+        <div style="min-width:220px;">
+          <div style="font-weight:700;margin-bottom:8px;">
+            ${this.escapeHtml(p.title)}
+          </div>
+          <div><strong>天気:</strong> ${meta.text}</div>
+          <div><strong>気温:</strong> ${w?.current?.temperature_2m ?? '-'}°C</div>
+          <div><strong>風速:</strong> ${w?.current?.wind_speed_10m ?? '-'}km/h</div>
         </div>
-        <div><strong>天気:</strong> ${this.escapeHtml(meta.text)}</div>
-        <div><strong>気温:</strong> ${temp ?? '-'} ${this.escapeHtml(tempUnit)}</div>
-        <div><strong>風速:</strong> ${wind ?? '-'} ${this.escapeHtml(windUnit)}</div>
-      </div>
-    `;
+      `;
 
-      marker.bindPopup(popupHtml, { className: 'dark-popup', closeButton: true });
+      marker.bindPopup(popupHtml, {
+        className: 'dark-popup',
+        closeButton: true,
+      });
 
       marker.addTo(this.prefLayer);
     }
   }
-export enum WeatherLayerMode {
-  REGION = 'REGION',
-  PREF = 'PREF'
-}
 
+  /** =================================
+   * 中心天気
+   * ================================= */
+
+  private async updateCenterWeather(): Promise<void> {
+    const c = this.map.getCenter();
+
+    const lat = Number(c.lat.toFixed(5));
+    const lon = Number(c.lng.toFixed(5));
+
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${lat}` +
+      `&longitude=${lon}` +
+      `&current=temperature_2m,weather_code,wind_speed_10m` +
+      `&timezone=auto`;
+
+    this.centerLoading = true;
+
+    try {
+      const res = await fetch(url);
+
+      const data = await res.json();
+
+      this.centerWeather = data;
+
+      this.centerWeatherText = this.weatherCodeToText(data.current?.weather_code);
+    } catch (e) {
+      this.centerError = '取得失敗';
+    } finally {
+      this.centerLoading = false;
+    }
+  }
+
+  /** =================================
+   * Utility
+   * ================================= */
+
+  private weatherCodeToText(code?: number): string {
+    switch (code) {
+      case 0:
+        return '快晴';
+      case 1:
+      case 2:
+        return '晴れ';
+      case 3:
+        return '曇り';
+      case 61:
+      case 63:
+      case 65:
+        return '雨';
+      case 71:
+      case 73:
+      case 75:
+        return '雪';
+      case 95:
+        return '雷雨';
+      default:
+        return '不明';
+    }
+  }
+
+  private weatherCodeToMaterial(code?: number) {
+    switch (code) {
+      case 0:
+        return { iconName: 'wb_sunny', color: '#fbc02d', text: '快晴' };
+
+      case 1:
+      case 2:
+        return { iconName: 'partly_cloudy_day', color: '#ffca28', text: '晴れ' };
+
+      case 3:
+        return { iconName: 'cloud', color: '#90a4ae', text: '曇り' };
+
+      case 61:
+      case 63:
+      case 65:
+        return { iconName: 'umbrella', color: '#1976d2', text: '雨' };
+
+      case 71:
+      case 73:
+      case 75:
+        return { iconName: 'ac_unit', color: '#64b5f6', text: '雪' };
+
+      case 95:
+        return { iconName: 'thunderstorm', color: '#d32f2f', text: '雷雨' };
+
+      default:
+        return { iconName: 'help_outline', color: '#757575', text: '不明' };
+    }
+  }
+
+  private formatPrefCity(pref: string, city: string): string {
+    return `${pref}県${city}市`;
+  }
+
+  private escapeHtml(s: string): string {
+    return (s ?? '').replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+    );
+  }
 }
