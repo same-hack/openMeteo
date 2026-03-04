@@ -567,4 +567,100 @@ export class App implements AfterViewInit {
       },
     });
   }
+
+  private renderMarkers(mode: 'pref' | 'region'): void {
+    this.prefLayer.clearLayers();
+
+    const points =
+      mode === 'pref'
+        ? PREF_CAPITALS.map((p) => ({
+            lat: p.lat,
+            lng: p.lng,
+            label: p.pref,
+            title: this.formatPrefCity(p.pref, p.city),
+          }))
+        : this.REGION_POINTS.map((r) => ({
+            lat: r.lat,
+            lng: r.lng,
+            label: r.region,
+            title: r.region,
+          }));
+
+    const weatherList = mode === 'pref' ? this.prefWeatherList : this.regionWeatherList;
+
+    if (!weatherList) return;
+
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const w = weatherList[i];
+
+      const code = w?.current?.weather_code;
+      const temp = w?.current?.temperature_2m;
+      const tempUnit = w?.current_units?.temperature_2m ?? '°C';
+
+      const wind = w?.current?.wind_speed_10m;
+      const windUnit = w?.current_units?.wind_speed_10m ?? 'km/h';
+
+      const meta = this.weatherCodeToMaterial(code);
+
+      const iconHtml = `
+      <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        padding:8px 10px;
+        background:rgba(34,34,34,0.92);
+        border-radius:10px;
+        box-shadow:0 4px 10px rgba(0,0,0,0.35);
+        white-space:nowrap;
+        pointer-events:none;
+      ">
+        <span class="material-icons" style="
+          font-size:22px;
+          line-height:22px;
+          color:${meta.color};
+          transform:${meta.offset};
+          margin-bottom:4px;
+        ">${meta.iconName}</span>
+
+        <span style="
+          font-size:12px;
+          font-weight:800;
+          color:${meta.color};
+          line-height:1;
+        ">${this.escapeHtml(p.label)}</span>
+      </div>
+    `;
+
+      const icon = L.divIcon({
+        html: iconHtml,
+        className: '',
+        iconSize: [72, 58],
+        iconAnchor: [36, 29],
+      });
+
+      const marker = L.marker([p.lat, p.lng], { icon });
+
+      const popupHtml = `
+      <div style="min-width:220px;">
+        <div style="font-weight:700;margin-bottom:8px;">
+          ${this.escapeHtml(p.title)}
+        </div>
+        <div><strong>天気:</strong> ${this.escapeHtml(meta.text)}</div>
+        <div><strong>気温:</strong> ${temp ?? '-'} ${this.escapeHtml(tempUnit)}</div>
+        <div><strong>風速:</strong> ${wind ?? '-'} ${this.escapeHtml(windUnit)}</div>
+      </div>
+    `;
+
+      marker.bindPopup(popupHtml, { className: 'dark-popup', closeButton: true });
+
+      marker.addTo(this.prefLayer);
+    }
+  }
+export enum WeatherLayerMode {
+  REGION = 'REGION',
+  PREF = 'PREF'
+}
+
 }
